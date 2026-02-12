@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard | Smart Traffic</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    /* --- 1. CẤU HÌNH MÀU SẮC & CƠ BẢN --- */
+    :root {
+      --primary: #2980b9;      /* Xanh dương hiện đại */
+      --primary-dark: #1f618d;
+      --accent: #1abc9c;       /* Xanh ngọc điểm nhấn */
+      --dark: #2c3e50;         /* Màu tối cho Sidebar */
+      --light-bg: #ecf0f1;     /* Màu nền sáng dịu */
+      --white: #ffffff;
+      --danger: #e74c3c;       /* Màu đỏ cảnh báo */
+      --warning: #f1c40f;      /* Màu vàng */
+      --shadow-card: 0 10px 20px rgba(0,0,0,0.08); /* Đổ bóng mềm */
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Roboto', sans-serif;
+      background: var(--light-bg);
+      color: #333;
+      overflow-x: hidden;
+    }
+
+    a { text-decoration: none; }
+
+    /* --- 2. SIDEBAR (MENU TRÁI) --- */
+    .sidebar { height: 100vh; width: 250px; position: fixed; top: 0; left: 0; background: var(--dark); color: white; transition: 0.3s; z-index: 100; padding-top: 60px; }
+    .sidebar.collapsed { left: -250px; }
+    .sidebar a { display: block; padding: 15px 25px; color: #ecf0f1; text-decoration: none; transition: 0.2s; }
+    .sidebar a:hover, .sidebar a.active { background: #34495e; border-left: 4px solid var(--primary); }
+
+    /* --- 3. MAIN CONTENT (NỘI DUNG CHÍNH) --- */
+    .content {
+      margin-left: 260px;
+      padding: 30px;
+      transition: 0.3s;
+    }
+
+    /* Top Bar */
+    .top-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 35px;
+    }
+    .top-bar h1 { margin: 0; color: var(--dark); font-size: 28px; }
+    .user-info { font-weight: bold; color: var(--primary); }
+
+    /* Grid Layout */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 30px;
+    }
+
+    /* --- 4. THẺ CARD GIAO DIỆN (QUAN TRỌNG) --- */
+    .card {
+      background: var(--white);
+      border-radius: 15px;
+      padding: 25px;
+      box-shadow: var(--shadow-card);
+      position: relative;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      overflow: hidden;
+      border-top: 5px solid transparent;
+    }
+
+    /* Hiệu ứng khi rê chuột vào Card */
+    .card-interactive:hover {
+      transform: translateY(-10px); /* Nổi lên */
+      box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+      border-top-color: var(--accent); /* Hiện viền màu xanh */
+      cursor: pointer;
+    }
+    
+    /* Mũi tên chỉ dẫn */
+    .arrow-icon {
+      position: absolute; top: 20px; right: 20px;
+      font-size: 20px; color: var(--accent);
+      opacity: 0; transform: translateX(-20px);
+      transition: 0.4s;
+    }
+    .card-interactive:hover .arrow-icon {
+      opacity: 1; transform: translateX(0);
+    }
+
+    /* Link ẩn phủ toàn bộ card */
+    .stretched-link::after {
+      position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+      z-index: 1; content: "";
+    }
+
+    .card-title {
+      font-size: 14px; font-weight: 700; text-transform: uppercase;
+      color: #95a5a6; margin-bottom: 15px; letter-spacing: 0.5px;
+    }
+
+    /* --- 5. ĐÈN GIAO THÔNG (VISUAL) --- */
+    .traffic-visual {
+      display: flex; align-items: center; justify-content: center; gap: 20px;
+    }
+    .pole {
+      background: #34495e; padding: 10px; border-radius: 10px;
+      display: flex; flex-direction: column; gap: 10px;
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+    }
+    .light {
+      width: 35px; height: 35px; border-radius: 50%;
+      background: #555; opacity: 0.3; transition: 0.2s;
+      border: 2px solid rgba(0,0,0,0.2);
+    }
+    .red.active { background: #ff4757; opacity: 1; box-shadow: 0 0 20px #ff4757; }
+    .yellow.active { background: #ffa502; opacity: 1; box-shadow: 0 0 20px #ffa502; }
+    .green.active { background: #2ed573; opacity: 1; box-shadow: 0 0 20px #2ed573; }
+
+    .timer-text {
+      font-size: 48px; font-weight: 800; color: var(--dark);
+      font-family: monospace;
+    }
+
+    /* --- 6. TRẠNG THÁI HỆ THỐNG --- */
+    .status-item {
+      display: flex; align-items: center; gap: 15px;
+      padding: 12px; margin-bottom: 10px;
+      background: #f8f9fa; border-radius: 8px;
+    }
+    .status-icon {
+      width: 40px; height: 40px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .status-ok { background: rgba(46, 213, 115, 0.2); color: #2ed573; }
+    .status-warn { background: rgba(255, 165, 2, 0.2); color: #ffa502; }
+
+    /* --- 7. MODAL LOGOUT --- */
+    .modal {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5); z-index: 2000;
+      align-items: center; justify-content: center;
+      backdrop-filter: blur(5px);
+    }
+    .modal-content {
+      background: white; padding: 30px; border-radius: 15px;
+      text-align: center; width: 350px;
+      animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    @keyframes popIn { from{transform: scale(0.8); opacity:0} to{transform: scale(1); opacity:1} }
+    .btn-group { margin-top: 20px; display: flex; gap: 10px; justify-content: center; }
+    .btn { padding: 10px 25px; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; }
+    .btn-yes { background: var(--danger); color: white; }
+    .btn-no { background: #dfe4ea; color: #333; }
+
+  </style>
+</head>
+<body>
+
+  <div id="logoutModal" class="modal">
+    <div class="modal-content">
+      <h2 style="color: var(--danger); margin-top: 0;">🛑 Đăng xuất</h2>
+      <p>Bạn có chắc muốn thoát khỏi hệ thống?</p>
+      <div class="btn-group">
+        <button class="btn btn-no" onclick="closeLogout()">Hủy</button>
+        <button class="btn btn-yes" onclick="confirmLogout()">Đồng ý</button>
+      </div>
+    </div>
+  </div>
+
+  <nav class="sidebar">
+    <div class="logo-area">
+      <h2>Smart Traffic</h2>
+    </div>
+    <a href="dashboard.html" class="active">📊 <span>Dashboard</span></a>
+    <a href="control.html">🚦 <span>Traffic lights</span></a>
+    <a href="violation.html">🚨 <span>Violations</span></a>
+    <a href="#" onclick="showLogout()">🚪 <span>Logout</span></a>
+  </nav>
+
+  <div class="content">
+    <div class="top-bar">
+      <h1>Dashboard Trung tâm</h1>
+      <div class="user-info">Xin chào, Admin</div>
+    </div>
+
+    <div class="dashboard-grid">
+      
+      <div class="card card-interactive">
+        <div class="card-title">Live Traffic Control</div>
+        <div class="arrow-icon">➜</div>
+        
+        <div class="traffic-visual">
+          <div class="pole">
+            <div id="red" class="light red"></div>
+            <div id="yellow" class="light yellow"></div>
+            <div id="green" class="light green"></div>
+          </div>
+          <div style="text-align: center;">
+            <div class="timer-text" id="time">10</div>
+            <small style="color: #7f8c8d;">Giây còn lại</small>
+          </div>
+        </div>
+
+        <div style="margin-top: 20px; font-size: 14px; display: flex; justify-content: space-between; color: #7f8c8d;">
+          <span>Trạng thái:</span>
+          <span style="color: var(--accent); font-weight: bold;">● Đang chạy</span>
+        </div>
+
+        <a href="control.html" class="stretched-link"></a>
+      </div>
+
+      <div class="card card-interactive">
+        <div class="card-title">Thống kê Vi phạm (Hôm nay)</div>
+        <div class="arrow-icon">➜</div>
+
+        <div style="height: 160px; position: relative;">
+          <canvas id="violationChart"></canvas>
+        </div>
+
+        <div style="text-align: center; margin-top: 10px;">
+          <h2 style="margin: 0; color: var(--danger); font-size: 36px;">23</h2>
+          <small style="color: #7f8c8d;">Lượt vi phạm</small>
+        </div>
+
+        <a href="violation.html" class="stretched-link"></a>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Sức khỏe Hệ thống</div>
+        
+        <div class="status-item">
+          <div class="status-icon status-ok">⚡</div>
+          <div>
+            <strong style="display:block">ESP32 Controller</strong>
+            <span style="font-size: 13px; color: #2ed573;">● Online (Ping: 24ms)</span>
+          </div>
+        </div>
+
+        <div class="status-item">
+          <div class="status-icon status-warn">📷</div>
+          <div>
+            <strong style="display:block">AI Camera Server</strong>
+            <span style="font-size: 13px; color: #ffa502;">● Processing (FPS: 25)</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // --- JS LOGIC ---
+    
+    // 1. Logout Logic
+    function showLogout() { document.getElementById('logoutModal').style.display = 'flex'; }
+    function closeLogout() { document.getElementById('logoutModal').style.display = 'none'; }
+    function confirmLogout() { localStorage.removeItem("loggedIn"); window.location.href = "login.html"; }
+
+    // 2. Traffic Light Simulation
+    let state = 0; let time = 10;
+    function updateLight() {
+      document.querySelectorAll('.light').forEach(l => l.classList.remove('active'));
+      if (state === 0) document.getElementById("green").classList.add("active");
+      if (state === 1) document.getElementById("yellow").classList.add("active");
+      if (state === 2) document.getElementById("red").classList.add("active");
+      document.getElementById("time").innerText = time < 10 ? "0" + time : time;
+    }
+    setInterval(() => {
+      time--;
+      if (time < 0) {
+        state = (state + 1) % 3;
+        time = (state === 1) ? 3 : 10;
+      }
+      updateLight();
+    }, 1000);
+    updateLight();
+
+    // 3. Chart JS
+    const ctx = document.getElementById('violationChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Vượt đèn đỏ', 'Lấn làn', 'Quá tốc độ'],
+        datasets: [{
+          data: [12, 5, 6],
+          backgroundColor: ['#ff4757', '#ffa502', '#1e90ff'],
+          borderWidth: 0,
+          hoverOffset: 10
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '75%',
+        plugins: { legend: { position: 'right', labels: { boxWidth: 10, usePointStyle: true } } }
+      }
+    });
+  </script>
+</body>
+</html>
