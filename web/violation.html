@@ -11,7 +11,7 @@
     :root { --primary: #1976d2; --dark: #2c3e50; --light: #f4f6f8; --danger: #e74c3c; }
     body { margin: 0; font-family: 'Roboto', sans-serif; background: var(--light); overflow-x: hidden; }
 
-    /* MENU & SIDEBAR (Dùng chung style) */
+    /* MENU & SIDEBAR */
     .sidebar { height: 100vh; width: 250px; position: fixed; top: 0; left: 0; background: var(--dark); color: white; transition: 0.3s; z-index: 100; padding-top: 60px; }
     .sidebar.collapsed { left: -250px; }
     .sidebar a { display: block; padding: 15px 25px; color: #ecf0f1; text-decoration: none; transition: 0.2s; }
@@ -29,10 +29,9 @@
     /* THỐNG KÊ SỐ */
     .stat-number { font-size: 48px; font-weight: bold; color: var(--danger); margin: 10px 0; }
     
-    /* MODAL LOGOUT */
+    /* MODAL */
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
     .modal-box { background: white; padding: 30px; border-radius: 10px; text-align: center; width: 300px; animation: popIn 0.3s ease; }
-    @keyframes popIn { from {transform: scale(0.8); opacity: 0;} to {transform: scale(1); opacity: 1;} }
     .modal-actions { margin-top: 20px; display: flex; gap: 10px; justify-content: center; }
     .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
     .btn-cancel { background: #eee; } .btn-confirm { background: var(--danger); color: white; }
@@ -76,7 +75,7 @@
     <div class="grid">
       <div class="card" style="text-align:center">
         <h3>Tổng số Vi phạm (Hôm nay)</h3>
-        <div class="stat-number"></div>
+        <div id="totalViolations" class="stat-number">0</div>
         <p style="color:#777">Phương tiện đã ghi nhận</p>
       </div>
 
@@ -99,46 +98,27 @@
             <th>Trạng thái</th>
           </tr>
         </thead>
-        <tbody>
-          <!-- <tr>
-            <td>10:15:23</td>
-            <td>29A-123.45</td>
-            <td><span class="tag bg-red">Vượt đèn đỏ</span></td>
-            <td>Chưa xử lý</td>
-          </tr>
-          <tr>
-            <td>10:12:05</td>
-            <td>30H-999.99</td>
-            <td><span class="tag bg-yellow">Lấn làn</span></td>
-            <td>Đã gửi phạt</td>
-          </tr>
-          <tr>
-            <td>09:45:10</td>
-            <td>59B-567.89</td>
-            <td><span class="tag bg-blue">Quá tốc độ</span></td>
-            <td>Chưa xử lý</td>
-          </tr> -->
+        <tbody id="violationTableBody">
+            <tr><td colspan="4" style="text-align:center">Đang tải dữ liệu...</td></tr>
         </tbody>
       </table>
     </div>
 
   </main>
 
-  <script>
-    // 1. MENU & LOGOUT
-    function toggleMenu() { document.getElementById('sidebar').classList.toggle('collapsed'); document.getElementById('main').classList.toggle('expanded'); }
-    function showLogout() { document.getElementById('logoutModal').style.display = 'flex'; }
-    function closeLogout() { document.getElementById('logoutModal').style.display = 'none'; }
-    function confirmLogout() { localStorage.removeItem("loggedIn"); window.location.href = "login.html"; }
+  <script type="module">
+    // 1. IMPORT FIREBASE
+    import { db } from '../js/config.js'; 
+    import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
-    // 2. VẼ BIỂU ĐỒ CHART.JS
+    // 2. KHỞI TẠO BIỂU ĐỒ (Rỗng ban đầu)
     const ctx = document.getElementById('violationChart').getContext('2d');
-    const myChart = new Chart(ctx, {
-        type: 'doughnut', // Biểu đồ tròn
+    let myChart = new Chart(ctx, {
+        type: 'doughnut',
         data: {
             labels: ['Vượt đèn đỏ', 'Lấn làn', 'Quá tốc độ'],
             datasets: [{
-                data: [12, 5, 6], 
+                data: [0, 0, 0], // Ban đầu là 0
                 backgroundColor: ['#e74c3c', '#f1c40f', '#3498db'],
                 borderWidth: 0,
                 hoverOffset: 10
@@ -147,12 +127,75 @@
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'right' }
-            },
-            cutout: '65%' // Làm rỗng giữa
+            plugins: { legend: { position: 'right' } },
+            cutout: '65%'
         }
     });
+
+    // 3. LẤY DỮ LIỆU TỪ FIREBASE
+    const violationRef = ref(db, 'traffic/violations');
+    
+    onValue(violationRef, (snapshot) => {
+        const data = snapshot.val();
+        const tableBody = document.getElementById('violationTableBody');
+        const totalDiv = document.getElementById('totalViolations');
+        
+        // Reset bộ đếm
+        let countRed = 0;
+        let countLane = 0;
+        let countSpeed = 0;
+        let total = 0;
+
+        tableBody.innerHTML = ''; // Xóa bảng cũ
+
+        if (data) {
+            // Chuyển object thành mảng để dễ xử lý
+            // Object.values(data) lấy danh sách, reverse() để đảo ngược (cái mới nhất lên đầu)
+            const logs = Object.values(data).reverse(); 
+            total = logs.length;
+
+            logs.forEach(log => {
+                // Đếm số lượng cho biểu đồ
+                if (log.type === 'red_light') countRed++;
+                else if (log.type === 'wrong_lane') countLane++;
+                else if (log.type === 'overspeed') countSpeed++;
+
+                // Xử lý hiển thị Badge màu sắc
+                let badgeClass = '';
+                let typeName = '';
+                if (log.type === 'red_light') { badgeClass = 'bg-red'; typeName = 'Vượt đèn đỏ'; }
+                else if (log.type === 'wrong_lane') { badgeClass = 'bg-yellow'; typeName = 'Lấn làn'; }
+                else if (log.type === 'overspeed') { badgeClass = 'bg-blue'; typeName = 'Quá tốc độ'; }
+
+                // Tạo dòng HTML
+                const row = `
+                    <tr>
+                        <td>${log.time || '--:--'}</td>
+                        <td><strong>${log.plate || 'Unknown'}</strong></td>
+                        <td><span class="tag ${badgeClass}">${typeName}</span></td>
+                        <td>${log.status || 'Chờ xử lý'}</td>
+                    </tr>
+                `;
+                tableBody.innerHTML += row;
+            });
+        } else {
+            tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center">Chưa có dữ liệu vi phạm</td></tr>';
+        }
+
+        // Cập nhật số tổng
+        totalDiv.innerText = total;
+
+        // Cập nhật biểu đồ
+        myChart.data.datasets[0].data = [countRed, countLane, countSpeed];
+        myChart.update();
+    });
+
+    // 4. MENU & LOGOUT FUNCTIONS (Global Scope)
+    window.toggleMenu = function() { document.getElementById('sidebar').classList.toggle('collapsed'); document.getElementById('main').classList.toggle('expanded'); }
+    window.showLogout = function() { document.getElementById('logoutModal').style.display = 'flex'; }
+    window.closeLogout = function() { document.getElementById('logoutModal').style.display = 'none'; }
+    window.confirmLogout = function() { window.location.href = "login.html"; }
+
   </script>
 </body>
 </html>

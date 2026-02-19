@@ -162,28 +162,27 @@
 
   <div id="logoutModal" class="modal">
     <div class="modal-content">
-      <h2 style="color: var(--danger); margin-top: 0;">🛑 Đăng xuất</h2>
-      <p>Bạn có chắc muốn thoát khỏi hệ thống?</p>
+      <h2 style="color: var(--danger); margin-top: 0;">Đăng xuất?</h2>
+      <p>Bạn muốn thoát khỏi hệ thống?</p>
       <div class="btn-group">
-        <button class="btn btn-no" onclick="closeLogout()">Hủy</button>
-        <button class="btn btn-yes" onclick="confirmLogout()">Đồng ý</button>
+        <button class="btn btn-no" onclick="closeLogout()">Không</button>
+        <button class="btn btn-yes" onclick="confirmLogout()">Có</button>
       </div>
     </div>
   </div>
 
-  <nav class="sidebar">
-    <div class="logo-area">
-      <h2>Smart Traffic</h2>
-    </div>
+  <nav class="sidebar" id="sidebar">
+    <h3 style="text-align:center; color:#fff; border-bottom:1px solid #444; padding-bottom:15px;">SMART TRAFFIC</h3>
     <a href="dashboard.html" class="active">📊 <span>Dashboard</span></a>
     <a href="control.html">🚦 <span>Traffic lights</span></a>
     <a href="violation.html">🚨 <span>Violations</span></a>
     <a href="#" onclick="showLogout()">🚪 <span>Logout</span></a>
   </nav>
 
-  <div class="content">
+  <main id="main" class="content">
     <div class="top-bar">
-      <h1>Dashboard Trung tâm</h1>
+      <button class="menu-btn" onclick="toggleMenu()">☰</button>
+      <h2>Dashboard Trung tâm</h2>
       <div class="user-info">Xin chào, Admin</div>
     </div>
 
@@ -200,14 +199,16 @@
             <div id="green" class="light green"></div>
           </div>
           <div style="text-align: center;">
-            <div class="timer-text" id="time">10</div>
+            <!-- <div class="timer-text" id="time">10</div> -->
+            <div class="timer-text" id="visualTimer">--</div>
             <small style="color: #7f8c8d;">Giây còn lại</small>
           </div>
         </div>
 
         <div style="margin-top: 20px; font-size: 14px; display: flex; justify-content: space-between; color: #7f8c8d;">
           <span>Trạng thái:</span>
-          <span style="color: var(--accent); font-weight: bold;">● Đang chạy</span>
+          <span id="system-status-text" style="color: var(--accent); font-weight: bold;">● Đang chạy</span>
+          <!-- <span style="color: var(--accent); font-weight: bold;">● Đang chạy</span> -->
         </div>
 
         <a href="control.html" class="stretched-link"></a>
@@ -222,7 +223,8 @@
         </div>
 
         <div style="text-align: center; margin-top: 10px;">
-          <h2 style="margin: 0; color: var(--danger); font-size: 36px;">23</h2>
+          <!-- <h2 style="margin: 0; color: var(--danger); font-size: 36px;">23</h2> -->
+          <h2 id="total-violation" style="margin: 0; color: var(--danger); font-size: 36px;">0</h2>
           <small style="color: #7f8c8d;">Lượt vi phạm</small>
         </div>
 
@@ -235,70 +237,132 @@
         <div class="status-item">
           <div class="status-icon status-ok">⚡</div>
           <div>
+            <!-- <strong style="display:block">ESP32 Controller</strong>
+            <span style="font-size: 13px; color: #2ed573;">● Online (Ping: 24ms)</span> -->
             <strong style="display:block">ESP32 Controller</strong>
-            <span style="font-size: 13px; color: #2ed573;">● Online (Ping: 24ms)</span>
+            <span id="esp32-info" style="font-size: 13px; color: #2ed573;">● Đang tải...</span>
           </div>
         </div>
 
         <div class="status-item">
           <div class="status-icon status-warn">📷</div>
           <div>
+            <!-- <strong style="display:block">AI Camera Server</strong>
+            <span style="font-size: 13px; color: #ffa502;">● Processing (FPS: 25)</span> -->
             <strong style="display:block">AI Camera Server</strong>
-            <span style="font-size: 13px; color: #ffa502;">● Processing (FPS: 25)</span>
+            <span id="camera-info" style="font-size: 13px; color: #ffa502;">● Đang tải...</span>
           </div>
         </div>
       </div>
 
     </div>
-  </div>
+  </main>
 
-  <script>
-    // --- JS LOGIC ---
-    
-    // 1. Logout Logic
-    function showLogout() { document.getElementById('logoutModal').style.display = 'flex'; }
-    function closeLogout() { document.getElementById('logoutModal').style.display = 'none'; }
-    function confirmLogout() { localStorage.removeItem("loggedIn"); window.location.href = "login.html"; }
+  <script type="module">
+    // 1. IMPORT FIREBASE
+    import { db } from '../js/config.js';
+    import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
-    // 2. Traffic Light Simulation
-    let state = 0; let time = 10;
-    function updateLight() {
-      document.querySelectorAll('.light').forEach(l => l.classList.remove('active'));
-      if (state === 0) document.getElementById("green").classList.add("active");
-      if (state === 1) document.getElementById("yellow").classList.add("active");
-      if (state === 2) document.getElementById("red").classList.add("active");
-      document.getElementById("time").innerText = time < 10 ? "0" + time : time;
-    }
-    setInterval(() => {
-      time--;
-      if (time < 0) {
-        state = (state + 1) % 3;
-        time = (state === 1) ? 3 : 10;
-      }
-      updateLight();
-    }, 1000);
-    updateLight();
-
-    // 3. Chart JS
+    // --- A. KHỞI TẠO BIỂU ĐỒ (CHART JS) ---
+    // Khai báo biến global để lát nữa update dữ liệu vào
     const ctx = document.getElementById('violationChart').getContext('2d');
-    new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: ['Vượt đèn đỏ', 'Lấn làn', 'Quá tốc độ'],
-        datasets: [{
-          data: [12, 5, 6],
-          backgroundColor: ['#ff4757', '#ffa502', '#1e90ff'],
-          borderWidth: 0,
-          hoverOffset: 10
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '75%',
-        plugins: { legend: { position: 'right', labels: { boxWidth: 10, usePointStyle: true } } }
-      }
+    let violationChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Vượt đèn đỏ', 'Lấn làn', 'Quá tốc độ'],
+            datasets: [{
+                data: [0, 0, 0], // Mặc định là 0
+                backgroundColor: ['#ff4757', '#ffa502', '#1e90ff'],
+                borderWidth: 0,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '75%',
+            plugins: { legend: { position: 'right', labels: { boxWidth: 10, usePointStyle: true } } }
+        }
     });
+
+    // --- B. GIÁM SÁT ĐÈN GIAO THÔNG (REAL-TIME) ---
+    onValue(ref(db, 'traffic'), (snapshot) => {
+        const data = snapshot.val(); 
+        if(!data) return;
+
+        // 1. Cập nhật đèn (Xanh/Đỏ/Vàng)
+        document.querySelectorAll('.light').forEach(l => l.classList.remove('active'));
+        if (data.current_light == 0) document.getElementById("green").classList.add("active");
+        if (data.current_light == 1) document.getElementById("yellow").classList.add("active");
+        if (data.current_light == 2) document.getElementById("red").classList.add("active");
+
+        // 2. Cập nhật đồng hồ đếm ngược
+        let t = data.timer || 0;
+        document.getElementById("visualTimer").innerText = t < 10 ? "0" + t : t;
+
+        // 3. Cập nhật dòng chữ trạng thái
+        const statusText = document.getElementById("system-status-text");
+        if(data.is_active) {
+            statusText.innerHTML = "● Đang chạy";
+            statusText.style.color = "var(--accent)";
+        } else {
+            statusText.innerHTML = "● Đang tắt/Bảo trì";
+            statusText.style.color = "#7f8c8d";
+        }
+    });
+
+    // --- C. GIÁM SÁT VI PHẠM (CẬP NHẬT BIỂU ĐỒ) ---
+    onValue(ref(db, 'violations'), (snapshot) => {
+        const data = snapshot.val();
+        if(!data) return;
+
+        const red = data.red_light || 0;
+        const lane = data.wrong_lane || 0;
+        const speed = data.overspeed || 0;
+
+        // 1. Cập nhật dữ liệu vào biểu đồ
+        violationChart.data.datasets[0].data = [red, lane, speed];
+        violationChart.update(); // Lệnh này bắt Chart vẽ lại hình mới
+
+        // 2. Tính tổng và hiển thị số to
+        const total = red + lane + speed;
+        document.getElementById("total-violation").innerText = total;
+    });
+
+    // --- D. GIÁM SÁT SỨC KHỎE HỆ THỐNG ---
+    onValue(ref(db, 'system'), (snapshot) => {
+        const data = snapshot.val();
+        if(!data) return;
+
+        // 1. ESP32 Info
+        const espEl = document.getElementById("esp32-info");
+        if(data.esp32) {
+            // Ví dụ data: { status: "Online", ping: 24 }
+            let color = data.esp32.status === "Online" ? "#2ed573" : "#ff4757";
+            espEl.innerHTML = `● ${data.esp32.status} (Ping: ${data.esp32.ping}ms)`;
+            espEl.style.color = color;
+        }
+
+        // 2. Camera Info
+        const camEl = document.getElementById("camera-info");
+        if(data.camera) {
+            // Ví dụ data: { status: "Processing", fps: 25 }
+            let color = data.camera.status === "Processing" ? "#ffa502" : "#ff4757";
+            camEl.innerHTML = `● ${data.camera.status} (FPS: ${data.camera.fps})`;
+            camEl.style.color = color;
+        }
+    });
+
+    // --- E. LOGIC KHÁC (MENU, LOGOUT) ---
+    // Giữ nguyên logic đóng mở menu và logout như cũ
+    window.toggleMenu = function() {
+        document.getElementById('sidebar').classList.toggle('collapsed');
+        document.getElementById('main-content').classList.toggle('expanded');
+    }
+    window.showLogout = function() { document.getElementById('logoutModal').style.display = 'flex'; }
+    window.closeLogout = function() { document.getElementById('logoutModal').style.display = 'none'; }
+    window.confirmLogout = function() { localStorage.removeItem("loggedIn"); window.location.href = "login.html"; }
+
   </script>
 </body>
 </html>
