@@ -8,35 +8,25 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
   
   <style>
+    /* --- GIỮ NGUYÊN CSS GIAO DIỆN CỦA BÀ --- */
     :root { --primary: #1976d2; --dark: #2c3e50; --light: #f4f6f8; --danger: #e74c3c; }
     body { margin: 0; font-family: 'Roboto', sans-serif; background: var(--light); overflow-x: hidden; }
-
-    /* MENU & SIDEBAR */
     .sidebar { height: 100vh; width: 250px; position: fixed; top: 0; left: 0; background: var(--dark); color: white; transition: 0.3s; z-index: 100; padding-top: 60px; }
     .sidebar.collapsed { left: -250px; }
     .sidebar a { display: block; padding: 15px 25px; color: #ecf0f1; text-decoration: none; transition: 0.2s; }
     .sidebar a:hover, .sidebar a.active { background: #34495e; border-left: 4px solid var(--primary); }
-    
     .content { margin-left: 250px; padding: 20px; transition: 0.3s; }
     .content.expanded { margin-left: 0; }
     .menu-btn { font-size: 24px; cursor: pointer; border: none; background: none; }
     .top-bar { display: flex; align-items: center; margin-bottom: 20px; }
-
-    /* LAYOUT DASHBOARD */
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
     .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
-
-    /* THỐNG KÊ SỐ */
     .stat-number { font-size: 48px; font-weight: bold; color: var(--danger); margin: 10px 0; }
-    
-    /* MODAL */
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
     .modal-box { background: white; padding: 30px; border-radius: 10px; text-align: center; width: 300px; animation: popIn 0.3s ease; }
     .modal-actions { margin-top: 20px; display: flex; gap: 10px; justify-content: center; }
     .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
     .btn-cancel { background: #eee; } .btn-confirm { background: var(--danger); color: white; }
-
-    /* TABLE STYLE */
     table { width: 100%; border-collapse: collapse; margin-top: 20px; }
     th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
     th { background-color: #f8f9fa; color: #333; }
@@ -99,26 +89,23 @@
           </tr>
         </thead>
         <tbody id="violationTableBody">
-            <tr><td colspan="4" style="text-align:center">Đang tải dữ liệu...</td></tr>
+            <tr><td colspan="4" style="text-align:center">Đang tải dữ liệu từ MongoDB...</td></tr>
         </tbody>
       </table>
     </div>
-
   </main>
 
-  <script type="module">
-    // 1. IMPORT FIREBASE
-    import { db } from '../js/config.js'; 
-    import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
+  <script>
+    const API_BASE_URL = "http://localhost:5000/api";
 
-    // 2. KHỞI TẠO BIỂU ĐỒ (Rỗng ban đầu)
+    // 1. KHỞI TẠO BIỂU ĐỒ
     const ctx = document.getElementById('violationChart').getContext('2d');
     let myChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels: ['Vượt đèn đỏ', 'Lấn làn', 'Quá tốc độ'],
             datasets: [{
-                data: [0, 0, 0], // Ban đầu là 0
+                data: [0, 0, 0],
                 backgroundColor: ['#e74c3c', '#f1c40f', '#3498db'],
                 borderWidth: 0,
                 hoverOffset: 10
@@ -132,70 +119,68 @@
         }
     });
 
-    // 3. LẤY DỮ LIỆU TỪ FIREBASE
-    const violationRef = ref(db, 'traffic/violations');
-    
-    onValue(violationRef, (snapshot) => {
-        const data = snapshot.val();
-        const tableBody = document.getElementById('violationTableBody');
-        const totalDiv = document.getElementById('totalViolations');
-        
-        // Reset bộ đếm
-        let countRed = 0;
-        let countLane = 0;
-        let countSpeed = 0;
-        let total = 0;
+    // 2. HÀM LẤY DỮ LIỆU TỪ SERVER PYTHON (MONGODB)
+    async function fetchViolations() {
+        try {
+            // Gọi API lấy danh sách chi tiết (bà cần thêm route này ở server.py)
+            const response = await fetch(`${API_BASE_URL}/violations/list`);
+            if (!response.ok) return;
+            
+            const logs = await response.json();
+            const tableBody = document.getElementById('violationTableBody');
+            const totalDiv = document.getElementById('totalViolations');
+            
+            let countRed = 0, countLane = 0, countSpeed = 0;
+            tableBody.innerHTML = '';
 
-        tableBody.innerHTML = ''; // Xóa bảng cũ
+            if (logs && logs.length > 0) {
+                totalDiv.innerText = logs.length;
 
-        if (data) {
-            // Chuyển object thành mảng để dễ xử lý
-            // Object.values(data) lấy danh sách, reverse() để đảo ngược (cái mới nhất lên đầu)
-            const logs = Object.values(data).reverse(); 
-            total = logs.length;
+                logs.forEach(log => {
+                    // Đếm lỗi
+                    if (log.type === 'Vượt đèn đỏ') countRed++;
+                    else if (log.type === 'Lấn làn') countLane++;
+                    else if (log.type === 'Quá tốc độ') countSpeed++;
 
-            logs.forEach(log => {
-                // Đếm số lượng cho biểu đồ
-                if (log.type === 'red_light') countRed++;
-                else if (log.type === 'wrong_lane') countLane++;
-                else if (log.type === 'overspeed') countSpeed++;
+                    // Badge màu sắc
+                    let badgeClass = 'bg-blue', typeName = log.type;
+                    if (log.type === 'Vượt đèn đỏ') badgeClass = 'bg-red';
+                    else if (log.type === 'Lấn làn') badgeClass = 'bg-yellow';
 
-                // Xử lý hiển thị Badge màu sắc
-                let badgeClass = '';
-                let typeName = '';
-                if (log.type === 'red_light') { badgeClass = 'bg-red'; typeName = 'Vượt đèn đỏ'; }
-                else if (log.type === 'wrong_lane') { badgeClass = 'bg-yellow'; typeName = 'Lấn làn'; }
-                else if (log.type === 'overspeed') { badgeClass = 'bg-blue'; typeName = 'Quá tốc độ'; }
+                    const row = `
+                        <tr>
+                            <td>${log.time || '--:--'}</td>
+                            <td><strong>${log.plate || 'BKS-6688'}</strong></td>
+                            <td><span class="tag ${badgeClass}">${typeName}</span></td>
+                            <td><span style="color: #27ae60">● Đã lưu DB</span></td>
+                        </tr>
+                    `;
+                    tableBody.innerHTML += row;
+                });
 
-                // Tạo dòng HTML
-                const row = `
-                    <tr>
-                        <td>${log.time || '--:--'}</td>
-                        <td><strong>${log.plate || 'Unknown'}</strong></td>
-                        <td><span class="tag ${badgeClass}">${typeName}</span></td>
-                        <td>${log.status || 'Chờ xử lý'}</td>
-                    </tr>
-                `;
-                tableBody.innerHTML += row;
-            });
-        } else {
-            tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center">Chưa có dữ liệu vi phạm</td></tr>';
+                // Cập nhật biểu đồ
+                myChart.data.datasets[0].data = [countRed, countLane, countSpeed];
+                myChart.update();
+            } else {
+                tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center">Chưa có dữ liệu vi phạm hôm nay</td></tr>';
+            }
+        } catch (error) {
+            console.error("Lỗi lấy dữ liệu vi phạm:", error);
         }
+    }
 
-        // Cập nhật số tổng
-        totalDiv.innerText = total;
+    // Tự động cập nhật mỗi 2 giây
+    fetchViolations();
+    setInterval(fetchViolations, 2000);
 
-        // Cập nhật biểu đồ
-        myChart.data.datasets[0].data = [countRed, countLane, countSpeed];
-        myChart.update();
-    });
-
-    // 4. MENU & LOGOUT FUNCTIONS (Global Scope)
-    window.toggleMenu = function() { document.getElementById('sidebar').classList.toggle('collapsed'); document.getElementById('main').classList.toggle('expanded'); }
+    // MENU & LOGOUT
+    window.toggleMenu = function() { 
+        document.getElementById('sidebar').classList.toggle('collapsed'); 
+        document.getElementById('main').classList.toggle('expanded'); 
+    }
     window.showLogout = function() { document.getElementById('logoutModal').style.display = 'flex'; }
     window.closeLogout = function() { document.getElementById('logoutModal').style.display = 'none'; }
     window.confirmLogout = function() { window.location.href = "login.html"; }
-
   </script>
 </body>
 </html>
