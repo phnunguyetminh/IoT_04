@@ -199,7 +199,6 @@
             <div id="green" class="light green"></div>
           </div>
           <div style="text-align: center;">
-            <!-- <div class="timer-text" id="time">10</div> -->
             <div class="timer-text" id="visualTimer">--</div>
             <small style="color: #7f8c8d;">Giây còn lại</small>
           </div>
@@ -208,7 +207,6 @@
         <div style="margin-top: 20px; font-size: 14px; display: flex; justify-content: space-between; color: #7f8c8d;">
           <span>Trạng thái:</span>
           <span id="system-status-text" style="color: var(--accent); font-weight: bold;">● Đang chạy</span>
-          <!-- <span style="color: var(--accent); font-weight: bold;">● Đang chạy</span> -->
         </div>
 
         <a href="control.html" class="stretched-link"></a>
@@ -223,7 +221,6 @@
         </div>
 
         <div style="text-align: center; margin-top: 10px;">
-          <!-- <h2 style="margin: 0; color: var(--danger); font-size: 36px;">23</h2> -->
           <h2 id="total-violation" style="margin: 0; color: var(--danger); font-size: 36px;">0</h2>
           <small style="color: #7f8c8d;">Lượt vi phạm</small>
         </div>
@@ -237,8 +234,6 @@
         <div class="status-item">
           <div class="status-icon status-ok">⚡</div>
           <div>
-            <!-- <strong style="display:block">ESP32 Controller</strong>
-            <span style="font-size: 13px; color: #2ed573;">● Online (Ping: 24ms)</span> -->
             <strong style="display:block">ESP32 Controller</strong>
             <span id="esp32-info" style="font-size: 13px; color: #2ed573;">● Đang tải...</span>
           </div>
@@ -247,8 +242,6 @@
         <div class="status-item">
           <div class="status-icon status-warn">📷</div>
           <div>
-            <!-- <strong style="display:block">AI Camera Server</strong>
-            <span style="font-size: 13px; color: #ffa502;">● Processing (FPS: 25)</span> -->
             <strong style="display:block">AI Camera Server</strong>
             <span id="camera-info" style="font-size: 13px; color: #ffa502;">● Đang tải...</span>
           </div>
@@ -258,13 +251,11 @@
     </div>
   </main>
 
-  <script type="module">
-    // 1. IMPORT FIREBASE
-    import { db } from '../js/config.js';
-    import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
+  <script>
+    // 1. CẤU HÌNH ĐỊA CHỈ SERVER API TỪ PYTHON FLASK
+    const API_BASE_URL = "http://localhost:5000/api"; 
 
-    // --- A. KHỞI TẠO BIỂU ĐỒ (CHART JS) ---
-    // Khai báo biến global để lát nữa update dữ liệu vào
+    // 2. KHỞI TẠO BIỂU ĐỒ (CHART JS)
     const ctx = document.getElementById('violationChart').getContext('2d');
     let violationChart = new Chart(ctx, {
         type: 'doughnut',
@@ -285,22 +276,45 @@
         }
     });
 
-    // --- B. GIÁM SÁT ĐÈN GIAO THÔNG (REAL-TIME) ---
-    onValue(ref(db, 'traffic'), (snapshot) => {
-        const data = snapshot.val(); 
-        if(!data) return;
+    // 3. HÀM GỌI API ĐỂ LẤY DỮ LIỆU TỪ SERVER PYTHON
+    async function fetchDashboardData() {
+        try {
+            // Lấy dữ liệu Đèn giao thông
+            const trafficRes = await fetch(`${API_BASE_URL}/traffic`);
+            if (trafficRes.ok) {
+                const data = await trafficRes.json();
+                updateTrafficUI(data);
+            }
 
-        // 1. Cập nhật đèn (Xanh/Đỏ/Vàng)
+            // Lấy dữ liệu Vi phạm để vẽ biểu đồ
+            const violationRes = await fetch(`${API_BASE_URL}/violations/stats`);
+            if (violationRes.ok) {
+                const data = await violationRes.json();
+                updateChartUI(data);
+            }
+
+            // Lấy trạng thái hệ thống (Camera, ESP32)
+            const systemRes = await fetch(`${API_BASE_URL}/system/health`);
+            if (systemRes.ok) {
+                const data = await systemRes.json();
+                updateSystemUI(data);
+            }
+
+        } catch (error) {
+            console.log("Đang chờ Server Python bật... Lỗi kết nối:", error.message);
+        }
+    }
+
+    // 4. CÁC HÀM CẬP NHẬT GIAO DIỆN
+    function updateTrafficUI(data) {
         document.querySelectorAll('.light').forEach(l => l.classList.remove('active'));
         if (data.current_light == 0) document.getElementById("green").classList.add("active");
         if (data.current_light == 1) document.getElementById("yellow").classList.add("active");
         if (data.current_light == 2) document.getElementById("red").classList.add("active");
 
-        // 2. Cập nhật đồng hồ đếm ngược
         let t = data.timer || 0;
         document.getElementById("visualTimer").innerText = t < 10 ? "0" + t : t;
 
-        // 3. Cập nhật dòng chữ trạng thái
         const statusText = document.getElementById("system-status-text");
         if(data.is_active) {
             statusText.innerHTML = "● Đang chạy";
@@ -309,59 +323,48 @@
             statusText.innerHTML = "● Đang tắt/Bảo trì";
             statusText.style.color = "#7f8c8d";
         }
-    });
+    }
 
-    // --- C. GIÁM SÁT VI PHẠM (CẬP NHẬT BIỂU ĐỒ) ---
-    onValue(ref(db, 'violations'), (snapshot) => {
-        const data = snapshot.val();
-        if(!data) return;
-
+    function updateChartUI(data) {
         const red = data.red_light || 0;
         const lane = data.wrong_lane || 0;
         const speed = data.overspeed || 0;
 
-        // 1. Cập nhật dữ liệu vào biểu đồ
         violationChart.data.datasets[0].data = [red, lane, speed];
-        violationChart.update(); // Lệnh này bắt Chart vẽ lại hình mới
+        violationChart.update();
 
-        // 2. Tính tổng và hiển thị số to
         const total = red + lane + speed;
         document.getElementById("total-violation").innerText = total;
-    });
+    }
 
-    // --- D. GIÁM SÁT SỨC KHỎE HỆ THỐNG ---
-    onValue(ref(db, 'system'), (snapshot) => {
-        const data = snapshot.val();
-        if(!data) return;
-
-        // 1. ESP32 Info
+    function updateSystemUI(data) {
         const espEl = document.getElementById("esp32-info");
         if(data.esp32) {
-            // Ví dụ data: { status: "Online", ping: 24 }
             let color = data.esp32.status === "Online" ? "#2ed573" : "#ff4757";
             espEl.innerHTML = `● ${data.esp32.status} (Ping: ${data.esp32.ping}ms)`;
             espEl.style.color = color;
         }
 
-        // 2. Camera Info
         const camEl = document.getElementById("camera-info");
         if(data.camera) {
-            // Ví dụ data: { status: "Processing", fps: 25 }
             let color = data.camera.status === "Processing" ? "#ffa502" : "#ff4757";
             camEl.innerHTML = `● ${data.camera.status} (FPS: ${data.camera.fps})`;
             camEl.style.color = color;
         }
-    });
+    }
 
-    // --- E. LOGIC KHÁC (MENU, LOGOUT) ---
-    // Giữ nguyên logic đóng mở menu và logout như cũ
+    // 5. CHẠY VÒNG LẶP HỎI SERVER MỖI 1 GIÂY
+    fetchDashboardData();
+    setInterval(fetchDashboardData, 1000);
+
+    // 6. LOGIC GIAO DIỆN (MENU, LOGOUT)
     window.toggleMenu = function() {
         document.getElementById('sidebar').classList.toggle('collapsed');
-        document.getElementById('main-content').classList.toggle('expanded');
+        document.getElementById('main').style.marginLeft = document.getElementById('sidebar').classList.contains('collapsed') ? '0' : '260px';
     }
     window.showLogout = function() { document.getElementById('logoutModal').style.display = 'flex'; }
     window.closeLogout = function() { document.getElementById('logoutModal').style.display = 'none'; }
-    window.confirmLogout = function() { localStorage.removeItem("loggedIn"); window.location.href = "login.html"; }
+    window.confirmLogout = function() { window.location.href = "login.html"; }
 
   </script>
 </body>
