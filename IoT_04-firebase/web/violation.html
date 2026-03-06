@@ -85,7 +85,7 @@
           <tr>
             <th>Thời gian</th>
             <th>Biển số</th>
-            <th>Loại lỗi</th>
+            <th>Chủ xe</th> <th>Loại lỗi</th>
             <th>Trạng thái</th>
           </tr>
         </thead>
@@ -148,11 +148,15 @@
                     if (log.type === 'Vượt đèn đỏ') badgeClass = 'bg-red';
                     else if (log.type === 'Lấn làn') badgeClass = 'bg-yellow';
 
+                    // Lấy tên chủ xe từ API trả về (nếu không có thì để mặc định)
+                    const ownerName = log.owner_name || 'Khách vãng lai';
+
+                    // CẬP NHẬT LẠI BIẾN row ĐỂ THÊM CỘT CHỦ XE
                     const row = `
                         <tr>
                             <td>${log.time || '--:--'}</td>
                             <td><strong>${log.plate || 'BKS-6688'}</strong></td>
-                            <td><span class="tag ${badgeClass}">${typeName}</span></td>
+                            <td style="color: var(--dark); font-weight: 500;">${ownerName}</td> <td><span class="tag ${badgeClass}">${typeName}</span></td>
                             <td><span style="color: #27ae60">● Đã lưu DB</span></td>
                         </tr>
                     `;

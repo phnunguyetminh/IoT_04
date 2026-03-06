@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request # Đã thêm 'request' vào đây
 from flask_cors import CORS
 from pymongo import MongoClient
 import certifi
+import time
 
 app = Flask(__name__)
 # CORS là bùa hộ mệnh để Trang Web (Cổng 5500) lấy được dữ liệu từ Python (Cổng 5000)
@@ -16,14 +17,89 @@ collection = db['Violations']
 # Khai báo Collection Users
 users_collection = db['Users']
 
-# 1. API TRẢ VỀ THÔNG TIN ĐÈN (Tạm giả lập, sau này kết nối MQTT vô đây luôn)
+# --- BIẾN TOÀN CỤC LƯU TRẠNG THÁI TỪ ESP32 & LỆNH TỪ WEB ---
+traffic_state = {
+    "current_light": 0, 
+    "timer": 0,        # Sẽ do ESP32 gửi lên
+    "is_active": True, # Lệnh từ Web: True (Tự động), False (Thủ công)
+    "config": {        # Cài đặt thời gian từ Web
+        "red": 40,
+        "yellow": 4,
+        "green": 10
+    },
+    "has_new_config": False # Cờ báo hiệu có cài đặt thời gian mới từ Web
+}
+
+# =======================================================
+# NHÓM 1: API DÀNH CHO TRANG WEB (DASHBOARD & CONTROL)
+# =======================================================
+
+# 1.1 Web lấy thông tin hiển thị lên màn hình
 @app.route('/api/traffic', methods=['GET'])
 def get_traffic():
     return jsonify({
-        "current_light": 0, # 0: Xanh, 1: Vàng, 2: Đỏ
-        "timer": 15,
-        "is_active": True
+        "current_light": traffic_state["current_light"],
+        "timer": traffic_state["timer"],
+        "is_active": traffic_state["is_active"],
+        "red_time": traffic_state["config"]["red"],
+        "yellow_time": traffic_state["config"]["yellow"],
+        "green_time": traffic_state["config"]["green"]
     })
+
+# 1.2 Web gửi lệnh chuyển chế độ (Tự động / Thủ công)
+@app.route('/api/mode', methods=['POST'])
+def set_mode():
+    global traffic_state
+    data = request.json
+    if 'auto' in data:
+        traffic_state["is_active"] = data['auto']
+        mode = "Tự động" if data['auto'] else "Thủ công (Bảo trì)"
+        return jsonify({"status": "success", "message": f"Đã chuyển sang {mode}"})
+    return jsonify({"status": "error", "message": "Lỗi dữ liệu"}), 400
+
+# 1.3 Web gửi cấu hình thời gian mới
+@app.route('/api/settings', methods=['POST'])
+def set_settings():
+    global traffic_state
+    data = request.json
+    if 'red' in data and 'yellow' in data and 'green' in data:
+        traffic_state["config"]["red"] = data['red']
+        traffic_state["config"]["yellow"] = data['yellow']
+        traffic_state["config"]["green"] = data['green']
+        traffic_state["has_new_config"] = True # Giương cờ lên cho ESP32 biết
+        return jsonify({"status": "success", "message": "Đã lưu cài đặt!"})
+    return jsonify({"status": "error", "message": "Thiếu dữ liệu"}), 400
+
+
+# =======================================================
+# NHÓM 2: API DÀNH RIÊNG CHO MẠCH ESP32 (GIAO TIẾP HTTP)
+# =======================================================
+
+# 2.1 ESP32 liên tục gửi (POST) thời gian và màu đèn hiện tại lên Server
+@app.route('/api/esp32/update', methods=['POST'])
+def esp_update_status():
+    global traffic_state
+    data = request.json
+    if data and 'current_light' in data and 'timer' in data:
+        traffic_state['current_light'] = data['current_light']
+        traffic_state['timer'] = data['timer']
+        return jsonify({"status": "ok"})
+    return jsonify({"status": "error"}), 400
+
+# 2.2 ESP32 liên tục hỏi (GET) xem Web có lệnh gì mới không
+@app.route('/api/esp32/commands', methods=['GET'])
+def esp_get_commands():
+    global traffic_state
+    response = {
+        "is_active": traffic_state["is_active"],
+        "has_new_config": traffic_state["has_new_config"],
+        "config": traffic_state["config"]
+    }
+    # Sau khi ESP32 đọc xong cấu hình mới, ta hạ cờ xuống
+    if traffic_state["has_new_config"]:
+        traffic_state["has_new_config"] = False
+        
+    return jsonify(response)
 
 # 2. API TRẢ VỀ THỐNG KÊ VI PHẠM (ĐẾM TRỰC TIẾP TỪ MONGODB)
 @app.route('/api/violations/stats', methods=['GET'])
@@ -38,6 +114,46 @@ def get_stats():
         "wrong_lane": wrong_lane,
         "overspeed": overspeed
     })
+
+
+# 2.5 API TRẢ VỀ DANH SÁCH CHI TIẾT VI PHẠM CHO TRANG VIOLATION
+@app.route('/api/violations/list', methods=['GET'])
+def get_violations_list():
+    try:
+        pipeline = [
+            {"$sort": {"_id": -1}},
+            {"$limit": 50},
+            {
+                "$lookup": {
+                    "from": "Users",
+                
+                    "localField": "license_plate", 
+                    "foreignField": "plate",       
+                    "as": "user_info"
+                }
+            },
+            {
+                "$unwind": {
+                    "path": "$user_info",
+                    "preserveNullAndEmptyArrays": True
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    # CHUYỂN ĐỔI TÊN TRƯỜNG ĐỂ GIAO DIỆN HTML HIỂU ĐƯỢC
+                    "time": "$timestamp",       # Đọc 'timestamp' từ DB và gán vào biến 'time'
+                    "plate": "$license_plate",  # Đọc 'license_plate' từ DB và gán vào biến 'plate'
+                    "type": 1,
+                    "owner_name": {"$ifNull": ["$user_info.name", "Khách vãng lai"]} 
+                }
+            }
+        ]
+        
+        logs = list(collection.aggregate(pipeline))
+        return jsonify(logs)
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # 3. API TRẠNG THÁI HỆ THỐNG
 @app.route('/api/system/health', methods=['GET'])
