@@ -5,6 +5,61 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Control | Smart Traffic</title>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.js" type="text/javascript"></script>
+
+  <script>
+    const clientID = "ControlClient_" + parseInt(Math.random() * 1000, 10);
+    // SỬA CỔNG THÀNH 8884
+    const mqttClient = new Paho.MQTT.Client("broker.hivemq.com", 8884, "/mqtt", clientID);
+
+    mqttClient.onMessageArrived = function (message) {
+      if(message.destinationName === "traffic/status/Random4") {
+          const data = JSON.parse(message.payloadString);
+          
+          document.getElementById("timeDisplay").innerText = data.time;
+          
+          document.querySelectorAll('.light').forEach(l => l.classList.remove('active'));
+          if(data.light === 0) document.getElementById("green").classList.add("active");
+          else if(data.light === 1) document.getElementById("yellow").classList.add("active");
+          else if(data.light === 2) document.getElementById("red").classList.add("active");
+      }
+    };
+
+    mqttClient.connect({
+      useSSL: true, // BẬT SSL
+      onSuccess: function () {
+        console.log("✅ Control Panel đã kết nối MQTT thành công!");
+        mqttClient.subscribe("traffic/status/Random4");
+      },
+      onFailure: function (error) {
+        console.error("❌ Lỗi kết nối MQTT:", error.errorMessage);
+      }
+    });
+
+    document.getElementById("btnSave").addEventListener("click", () => {
+      let r = document.getElementById("redInput").value;
+      let y = document.getElementById("yellowInput").value;
+      let g = document.getElementById("greenInput").value;
+      
+      if(!r || !y || !g) {
+        alert("Vui lòng điền đủ thời gian!");
+        return;
+      }
+
+      let payloadStr = r + "," + y + "," + g; 
+      let message = new Paho.MQTT.Message(payloadStr);
+      message.destinationName = "traffic/command/Random4";
+      mqttClient.send(message);
+      
+      alert("✅ Đã gửi lệnh cài đặt thời gian xuống ESP32!");
+    });
+
+    window.toggleMenu = function() {
+      document.getElementById('sidebar').classList.toggle('collapsed');
+      document.getElementById('main').classList.toggle('expanded');
+    }
+  </script>
   
   <style>
     /* --- GIỮ NGUYÊN CSS CỦA BÀ --- */
@@ -117,23 +172,20 @@
             if (res.ok) {
                 const data = await res.json();
                 
-                // Cập nhật số giây
-                document.getElementById("timeDisplay").innerText = data.timer;
-
-                // Cập nhật đèn
-                document.querySelectorAll('.light').forEach(l => l.classList.remove('active'));
-                if (data.current_light == 0) document.getElementById("green").classList.add("active");
-                else if (data.current_light == 1) document.getElementById("yellow").classList.add("active");
-                else if (data.current_light == 2) document.getElementById("red").classList.add("active");
+                // COMMENT 5 DÒNG NÀY LẠI ĐỂ KHÔNG BỊ XUNG ĐỘT VỚI ESP32
+                // document.getElementById("timeDisplay").innerText = data.timer;
+                // document.querySelectorAll('.light').forEach(l => l.classList.remove('active'));
+                // if (data.current_light == 0) document.getElementById("green").classList.add("active");
+                // else if (data.current_light == 1) document.getElementById("yellow").classList.add("active");
+                // else if (data.current_light == 2) document.getElementById("red").classList.add("active");
 
                 if (!hasLoadedConfig && data.red_time) {
                     document.getElementById("redInput").value = data.red_time;
                     document.getElementById("yellowInput").value = data.yellow_time;
                     document.getElementById("greenInput").value = data.green_time;
-                    hasLoadedConfig = true; // Đánh dấu đã load xong, lần sau không đè số nữa
+                    hasLoadedConfig = true; 
                 }
 
-                // Cập nhật Mode (nếu Server có hỗ trợ trả về is_active)
                 if (data.is_active) {
                     document.getElementById("btnAuto").classList.add("active");
                     document.getElementById("btnManual").classList.remove("active");

@@ -7,6 +7,53 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.js" type="text/javascript"></script>
+
+  <script>
+    // ... (Giữ nguyên hàm fetchStats của bạn ở trên) ...
+
+    const clientID = "DashClient_" + parseInt(Math.random() * 1000, 10);
+    // SỬA CỔNG THÀNH 8884 (Cổng bảo mật WSS của HiveMQ)
+    const mqttClient = new Paho.MQTT.Client("broker.hivemq.com", 8884, "/mqtt", clientID);
+
+    mqttClient.onMessageArrived = function (message) {
+      if(message.destinationName === "traffic/status/Random4") {
+          const data = JSON.parse(message.payloadString);
+          
+          // SỬA: Đổi "timeDisplay" thành "visualTimer"
+          let t = data.time;
+          document.getElementById("visualTimer").innerText = t < 10 ? "0" + t : t;
+
+          // Cập nhật đèn từ ESP32
+          document.querySelectorAll('.light').forEach(l => l.classList.remove('active'));
+          if (data.light === 0) document.getElementById("green").classList.add("active");
+          else if (data.light === 1) document.getElementById("yellow").classList.add("active");
+          else if (data.light === 2) document.getElementById("red").classList.add("active");
+          
+          // Cập nhật trạng thái text
+          let statusText = document.getElementById("system-status-text");
+          if(data.light === 0) { statusText.innerHTML = '<span style="color: #27ae60;">● Đang Đèn Xanh</span>'; }
+          else if(data.light === 1) { statusText.innerHTML = '<span style="color: #f39c12;">● Đang Đèn Vàng</span>'; }
+          else if(data.light === 2) { statusText.innerHTML = '<span style="color: #c0392b;">● Đang Đèn Đỏ</span>'; }
+      }
+    };
+
+    mqttClient.connect({
+      useSSL: true, // BẮT BUỘC BẬT SSL ĐỂ TRÌNH DUYỆT KHÔNG CHẶN
+      onSuccess: function () {
+        console.log("✅ Dashboard đã kết nối MQTT thành công!");
+        mqttClient.subscribe("traffic/status/Random4");
+      },
+      onFailure: function (error) { // Bắt lỗi nếu không kết nối được
+        console.error("❌ Lỗi kết nối MQTT:", error.errorMessage);
+      }
+    });
+
+    window.toggleMenu = function() {
+      document.getElementById('sidebar').classList.toggle('collapsed');
+      document.getElementById('main').classList.toggle('expanded');
+    };
+  </script>
   <style>
     /* --- 1. CẤU HÌNH MÀU SẮC & CƠ BẢN --- */
     :root {
@@ -357,7 +404,6 @@
 
     // 5. CHẠY VÒNG LẶP HỎI SERVER MỖI 1 GIÂY
     fetchDashboardData();
-    setInterval(fetchDashboardData, 1000);
 
     // 6. LOGIC GIAO DIỆN (MENU, LOGOUT)
     window.toggleMenu = function() {

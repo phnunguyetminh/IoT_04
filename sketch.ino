@@ -28,7 +28,7 @@ int timerCounter = 0;
 int trafficState = 0; 
 int activeGreenTime = 10;
 int activeRedTime   = 40;
-const int TIME_YELLOW   = 4;
+int TIME_YELLOW = 4;
 
 bool wifiConnected = false;
 bool isObjectDetected = false;
@@ -46,6 +46,21 @@ void updateLCDViolation() {
 
 // Hàm callback nhận tin nhắn từ Python
 void callback(char* topic, byte* payload, unsigned int length) {
+  // Biến payload thành chuỗi chữ (String) để dễ đọc
+  payload[length] = '\0'; 
+  String msg = String((char*)payload);
+  
+  // 1. NẾU NHẬN LỆNH ĐỔI THỜI GIAN TỪ WEB (Kênh traffic/command/Random4)
+  if (String(topic) == "traffic/command/Random4") {
+    int r, y, g;
+    // Tách chuỗi "40,4,10" thành 3 số nguyên r, y, g
+    if (sscanf((char*)payload, "%d,%d,%d", &r, &y, &g) == 3) {
+      activeRedTime = r;
+      TIME_YELLOW = y;
+      activeGreenTime = g;
+      Serial.println("✅ Đã cập nhật thời gian từ Web!");
+    }
+  }
   Serial.println("\n--- CO TIN HIEU TU PYTHON ---");
   if (trafficState == 2) { 
     violationCount++;
@@ -64,7 +79,8 @@ void reconnect() {
     Serial.print("Dang ket noi MQTT...");
     if (client.connect("ESP32_Traffic_Wokwi_User")) {
       Serial.println("OK");
-      client.subscribe(mqtt_topic);
+      client.subscribe(mqtt_topic); // Kênh hiện tại (traffic/violation/Random4)
+      client.subscribe("traffic/command/Random4"); // THÊM DÒNG NÀY ĐỂ NHẬN LỆNH CÀI ĐẶT
     } else {
       Serial.print("Loi: "); Serial.print(client.state());
       delay(5000);
@@ -176,6 +192,12 @@ void loop() {
   if (currentMillis - previousMillis >= 1000) {
     previousMillis = currentMillis;
     timerCounter--;
+
+    // --- THÊM 3 DÒNG NÀY ĐỂ BẮN DỮ LIỆU LÊN WEB ---
+    char statusPayload[50];
+    sprintf(statusPayload, "{\"light\":%d,\"time\":%d}", trafficState, timerCounter);
+    client.publish("traffic/status/Random4", statusPayload);
+    // ----------------------------------------------
     
     lcd.setCursor(0, 1);
     lcd.print("T:");

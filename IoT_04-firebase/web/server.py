@@ -17,89 +17,45 @@ collection = db['Violations']
 # Khai báo Collection Users
 users_collection = db['Users']
 
-# --- BIẾN TOÀN CỤC LƯU TRẠNG THÁI TỪ ESP32 & LỆNH TỪ WEB ---
+# --- KHAI BÁO BIẾN TOÀN CỤC LƯU TRỮ CẤU HÌNH (Đã xóa bỏ giả lập đếm ngược) ---
 traffic_state = {
-    "current_light": 0, 
-    "timer": 0,        # Sẽ do ESP32 gửi lên
-    "is_active": True, # Lệnh từ Web: True (Tự động), False (Thủ công)
-    "config": {        # Cài đặt thời gian từ Web
-        "red": 40,
-        "yellow": 4,
-        "green": 10
-    },
-    "has_new_config": False # Cờ báo hiệu có cài đặt thời gian mới từ Web
+    "red_time": 40,      # Cài đặt thời gian đèn Đỏ
+    "yellow_time": 4,    # Cài đặt thời gian đèn Vàng
+    "green_time": 10,    # Cài đặt thời gian đèn Xanh
+    "is_active": True    # Chế độ Auto (True) / Manual (False)
 }
 
-# =======================================================
-# NHÓM 1: API DÀNH CHO TRANG WEB (DASHBOARD & CONTROL)
-# =======================================================
-
-# 1.1 Web lấy thông tin hiển thị lên màn hình
+# 1. API TRẢ VỀ CẤU HÌNH ĐÈN GIAO THÔNG (KHÔNG TỰ ĐẾM NGƯỢC NỮA)
 @app.route('/api/traffic', methods=['GET'])
 def get_traffic():
+    # Chỉ trả về các thông số cài đặt để Web hiển thị vào ô Input
     return jsonify({
-        "current_light": traffic_state["current_light"],
-        "timer": traffic_state["timer"],
         "is_active": traffic_state["is_active"],
-        "red_time": traffic_state["config"]["red"],
-        "yellow_time": traffic_state["config"]["yellow"],
-        "green_time": traffic_state["config"]["green"]
+        "red_time": traffic_state["red_time"],
+        "yellow_time": traffic_state["yellow_time"],
+        "green_time": traffic_state["green_time"]
     })
 
-# 1.2 Web gửi lệnh chuyển chế độ (Tự động / Thủ công)
-@app.route('/api/mode', methods=['POST'])
-def set_mode():
-    global traffic_state
-    data = request.json
-    if 'auto' in data:
-        traffic_state["is_active"] = data['auto']
-        mode = "Tự động" if data['auto'] else "Thủ công (Bảo trì)"
-        return jsonify({"status": "success", "message": f"Đã chuyển sang {mode}"})
-    return jsonify({"status": "error", "message": "Lỗi dữ liệu"}), 400
-
-# 1.3 Web gửi cấu hình thời gian mới
+# API NHẬN LỆNH LƯU CÀI ĐẶT THỜI GIAN TỪ TRANG CONTROL
 @app.route('/api/settings', methods=['POST'])
-def set_settings():
+def update_settings():
     global traffic_state
     data = request.json
-    if 'red' in data and 'yellow' in data and 'green' in data:
-        traffic_state["config"]["red"] = data['red']
-        traffic_state["config"]["yellow"] = data['yellow']
-        traffic_state["config"]["green"] = data['green']
-        traffic_state["has_new_config"] = True # Giương cờ lên cho ESP32 biết
-        return jsonify({"status": "success", "message": "Đã lưu cài đặt!"})
-    return jsonify({"status": "error", "message": "Thiếu dữ liệu"}), 400
+    traffic_state["red_time"] = data.get("red", 40)
+    traffic_state["yellow_time"] = data.get("yellow", 4)
+    traffic_state["green_time"] = data.get("green", 10)
+    
+    return jsonify({"status": "success", "message": "Đã cập nhật cấu hình!"})
 
-
-# =======================================================
-# NHÓM 2: API DÀNH RIÊNG CHO MẠCH ESP32 (GIAO TIẾP HTTP)
-# =======================================================
-
-# 2.1 ESP32 liên tục gửi (POST) thời gian và màu đèn hiện tại lên Server
-@app.route('/api/esp32/update', methods=['POST'])
-def esp_update_status():
+# API NHẬN LỆNH ĐỔI CHẾ ĐỘ AUTO/MANUAL TỪ TRANG CONTROL
+@app.route('/api/mode', methods=['POST'])
+def update_mode():
     global traffic_state
     data = request.json
-    if data and 'current_light' in data and 'timer' in data:
-        traffic_state['current_light'] = data['current_light']
-        traffic_state['timer'] = data['timer']
-        return jsonify({"status": "ok"})
-    return jsonify({"status": "error"}), 400
-
-# 2.2 ESP32 liên tục hỏi (GET) xem Web có lệnh gì mới không
-@app.route('/api/esp32/commands', methods=['GET'])
-def esp_get_commands():
-    global traffic_state
-    response = {
-        "is_active": traffic_state["is_active"],
-        "has_new_config": traffic_state["has_new_config"],
-        "config": traffic_state["config"]
-    }
-    # Sau khi ESP32 đọc xong cấu hình mới, ta hạ cờ xuống
-    if traffic_state["has_new_config"]:
-        traffic_state["has_new_config"] = False
-        
-    return jsonify(response)
+    traffic_state["is_active"] = data.get("auto", True)
+    
+    return jsonify({"status": "success"})
+# ... (Giữ nguyên các API Thống kê và Quản lý Users bên dưới của bạn) ...
 
 # 2. API TRẢ VỀ THỐNG KÊ VI PHẠM (ĐẾM TRỰC TIẾP TỪ MONGODB)
 @app.route('/api/violations/stats', methods=['GET'])
