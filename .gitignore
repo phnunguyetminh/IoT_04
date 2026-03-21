@@ -1,0 +1,35 @@
+# --- Các file rác của Hệ điều hành ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- File cấu hình của Trình soạn thảo (IDE) ---
+.vscode/
+.idea/
+*.suo
+*.sln
+
+# --- Nếu dùng Arduino / C / C++ ---
+*.o
+*.obj
+*.out
+*.hex
+*.bin
+build/
+
+# --- Nếu dùng Python ---
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+env/
+
+# --- Nếu dùng Node.js ---
+node_modules/
+npm-debug.log
+
+# --- File bảo mật (CỰC KỲ QUAN TRỌNG) ---
+.env
+*.pem
+*.key

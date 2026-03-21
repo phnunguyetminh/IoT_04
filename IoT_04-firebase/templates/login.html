@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <title>Login | Smart Traffic System</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="/static/css/style.css">
+  
   <style>
     body {
       margin: 0;
@@ -35,6 +36,7 @@
       margin-bottom: 15px;
       border: 1px solid #ccc;
       border-radius: 5px;
+      box-sizing: border-box; /* Fix lỗi input tràn viền */
     }
 
     .login-box button {
@@ -46,6 +48,7 @@
       border-radius: 5px;
       cursor: pointer;
       font-size: 16px;
+      transition: 0.2s;
     }
 
     .login-box button:hover {
@@ -55,31 +58,39 @@
 </head>
 
 <body>
-
   <div class="login-box">
     <h2>Smart Traffic</h2>
-
     <input type="email" id="email" placeholder="Email">
     <input type="password" id="password" placeholder="Password">
-
     <button onclick="login()">Login</button>
   </div>
 
-<script>
-  function login() {
-    const email = document.getElementById("email").value;
-    const password = document.getElementById("password").value;
+  <script>
+    function login() {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
 
-    // Login giả cho demo
-    if (email !== "" && password !== "") {
-      localStorage.setItem("loggedIn", "true");
-      window.location.href = "dashboard.html";
-    } else {
-      alert("Vui lòng nhập email và mật khẩu");
+      // Check rỗng trước
+      if (!email || !password) {
+        alert("⚠️ Vui lòng nhập đầy đủ email và mật khẩu!");
+        return; 
+      }
+
+      // Hardcode phân quyền demo
+      if (email === "admin@gmail.com" && password === "admin123") {
+        // Cấp quyền Admin -> vào Dashboard
+        localStorage.setItem("userRole", "admin");
+        window.location.href = "dashboard.html";
+
+      } else if (email === "user@gmail.com" && password === "user123") {
+        // Cấp quyền User -> đẩy thẳng qua Violation
+        localStorage.setItem("userRole", "user");
+        window.location.href = "dashboard.html";
+
+      } else {
+        alert("❌ Sai tài khoản hoặc mật khẩu!\n\n(Gợi ý test: admin@gmail.com/admin123 hoặc user@gmail.com/user123)");
+      }
     }
-  }
-</script>
-
-
+  </script>
 </body>
 </html>
