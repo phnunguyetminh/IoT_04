@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "author": "Rafly Naufal Herdiansyah",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": -48, "left": -110.36, "attrs": {} },
+    {
+      "type": "wokwi-led",
+      "id": "led2",
+      "top": -140,
+      "left": -313,
+      "attrs": { "color": "green" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led3",
+      "top": -140,
+      "left": -265,
+      "attrs": { "color": "yellow" }
+    },
+    { "type": "wokwi-led", "id": "led4", "top": -138, "left": -217, "attrs": { "color": "red" } },
+    {
+      "type": "wokwi-hc-sr04",
+      "id": "ultrasonic1",
+      "top": 24.3,
+      "left": 106.5,
+      "rotate": 90,
+      "attrs": { "distance": "400" }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "bz1",
+      "top": 139.5,
+      "left": -357.9,
+      "rotate": 270,
+      "attrs": { "volume": "0.1" }
+    },
+    { "type": "wokwi-lcd1602", "id": "lcd2", "top": -272, "left": 92, "attrs": { "pins": "i2c" } }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "ultrasonic1:GND", "esp:GND.3", "black", [ "h-134.4", "v-39.6", "h-19.2" ] ],
+    [ "ultrasonic1:VCC", "esp:5V", "red", [ "h-28.8", "v144", "h-240", "v-38.4" ] ],
+    [ "ultrasonic1:TRIG", "esp:5", "purple", [ "v-0.4", "h-153.6" ] ],
+    [ "ultrasonic1:ECHO", "esp:18", "green", [ "h0" ] ],
+    [ "led3:A", "esp:27", "gold", [ "v0" ] ],
+    [ "led4:A", "esp:14", "red", [ "v0" ] ],
+    [ "led2:A", "esp:26", "green", [ "v0" ] ],
+    [ "led4:C", "esp:GND.1", "black", [ "v0" ] ],
+    [ "led3:C", "esp:GND.1", "black", [ "v0" ] ],
+    [ "led2:C", "esp:GND.1", "black", [ "v0" ] ],
+    [ "bz1:2", "esp:13", "red", [ "h38.4", "v-38", "h134.25" ] ],
+    [ "bz1:1", "esp:GND.1", "black", [ "v-76.8", "h134.25" ] ],
+    [ "lcd2:GND", "esp:GND.2", "black", [ "h0" ] ],
+    [ "lcd2:VCC", "esp:5V", "red", [ "h-249.6", "v384.1" ] ],
+    [ "lcd2:SDA", "esp:21", "green", [ "h-67.2", "v249.8" ] ],
+    [ "lcd2:SCL", "esp:22", "purple", [ "h-38.4", "v211.5" ] ]
+  ],
+  "dependencies": {}
+}

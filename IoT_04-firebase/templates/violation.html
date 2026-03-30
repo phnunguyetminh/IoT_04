@@ -6,6 +6,7 @@
   <title>Violations | Smart Traffic</title>
   
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
   
   <style>
@@ -204,7 +205,63 @@
 
     // Lần đầu tải trang và loop mỗi 2 giây
     fetchViolations();
-    setInterval(fetchViolations, 2000);
+    // Lần đầu tải trang chỉ gọi database 1 lần để lấy lịch sử cũ
+    fetchViolations();
+    
+    // ==========================================
+    // CƠ CHẾ WEBSOCKET: TỰ ĐỘNG CHÈN DỮ LIỆU MỚI
+    // ==========================================
+    const mqttClient = new Paho.MQTT.Client("broker.hivemq.com", 8884, "/mqtt", "VioClient_" + Math.floor(Math.random()*1000));
+
+    mqttClient.onMessageArrived = function (message) {
+        if(message.destinationName === "traffic/web_dashboard") {
+            const data = JSON.parse(message.payloadString);
+            
+            // 1. Cập nhật tổng số
+            const totalEl = document.getElementById('totalViolations');
+            totalEl.innerText = parseInt(totalEl.innerText) + 1;
+
+            // 2. Cập nhật Chart
+            if (data.type === "Vượt đèn đỏ") myChart.data.datasets[0].data[0]++;
+            else if (data.type === "Lấn làn") myChart.data.datasets[0].data[1]++;
+            else if (data.type === "Quá tốc độ") myChart.data.datasets[0].data[2]++;
+            myChart.update();
+
+            // 3. Chèn 1 DÒNG MỚI LÊN ĐẦU BẢNG (Không cần reload)
+            const tableBody = document.getElementById('violationTableBody');
+            
+            // Xóa dòng "Chưa có dữ liệu" nếu là vi phạm đầu tiên
+            if (tableBody.innerHTML.includes("Chưa có dữ liệu")) tableBody.innerHTML = '';
+            
+            let badgeClass = 'bg-blue';
+            if (data.type === 'Vượt đèn đỏ') badgeClass = 'bg-red';
+            else if (data.type === 'Lấn làn') badgeClass = 'bg-yellow';
+
+            const newRow = `
+                <tr style="background-color: #ffeaa7; transition: background-color 2s;">
+                    <td>${data.timestamp}</td>
+                    <td><strong style="color: var(--danger); font-size: 18px;">${data.license_plate}</strong></td>
+                    <td style="color: var(--dark); font-weight: 500;">Đang tra cứu...</td> 
+                    <td><span class="tag ${badgeClass}">${data.type}</span></td>
+                    <td><span style="color: #27ae60">● Mới ghi nhận</span></td>
+                </tr>
+            `;
+            
+            // Chèn vào đầu bảng
+            tableBody.insertAdjacentHTML('afterbegin', newRow);
+            
+            // Hiệu ứng nháy màu vàng rồi tắt đi (tạo cảm giác real-time)
+            setTimeout(() => {
+                tableBody.firstElementChild.style.backgroundColor = "transparent";
+            }, 2000);
+        }
+    };
+
+    mqttClient.connect({
+        useSSL: true,
+        onSuccess: () => mqttClient.subscribe("traffic/web_dashboard"),
+        onFailure: (err) => console.log("Lỗi MQTT:", err.errorMessage)
+    });
 
     // 4. Menu & Modal Logic
     window.toggleMenu = () => { 
